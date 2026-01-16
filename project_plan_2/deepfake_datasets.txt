@@ -1,0 +1,66 @@
+# Dataset Strategy and Preparation
+## Comprehensive Data Pipeline for Deepfake Detection
+
+### Dataset Philosophy and Importance
+
+The quality and diversity of training data fundamentally determines the capabilities and limitations of our deepfake detection system. Unlike many computer vision tasks where a single large dataset suffices, deepfake detection requires exposure to multiple manipulation techniques, varying quality levels, diverse demographic representations, and realistic degradation conditions. Our dataset strategy therefore emphasizes breadth across manipulation methods, depth within each category, and careful attention to potential biases that could limit real-world performance.
+
+### Primary Video Deepfake Datasets
+
+FaceForensics++ represents one of the most foundational deepfake datasets and will serve as our primary training resource. This dataset contains one thousand original videos of subjects speaking to camera, which have been manipulated using four distinct methods to create four thousand fake versions. The manipulation methods include classical Deepfakes using autoencoder-based face swapping, Face2Face which transfers facial expressions from source to target while preserving identity, FaceSwap using traditional computer graphics techniques, and NeuralTextures which synthesizes facial regions using neural rendering. Critically, FaceForensics++ provides these manipulations at three compression levels designated c0 for raw uncompressed video, c23 for light compression, and c40 for heavy compression similar to what social media platforms apply. This compression diversity is essential because real-world deepfakes are almost always compressed during sharing, and models that only train on pristine samples often fail on compressed content.
+
+Celeb-DF v2 addresses a significant limitation in earlier datasets by providing high-quality deepfakes that more closely resemble state-of-the-art generation. The dataset contains five hundred ninety real videos and five thousand six hundred thirty-nine synthesized videos featuring celebrity faces. The generation quality is deliberately high to prevent models from relying on obvious low-quality artifacts, forcing them to learn more subtle manipulation signatures. This dataset is particularly valuable for training models that must detect sophisticated deepfakes rather than just amateur attempts.
+
+The Deepfake Detection Challenge dataset from Facebook AI represents the largest single deepfake collection with over one hundred thousand videos featuring three thousand four hundred twenty-six different actors. The enormous scale provides diversity in demographics, lighting conditions, camera angles, and video quality. Subjects span various ages, genders, and ethnicities, helping reduce bias in our trained models. The DFDC dataset uses professional-grade deepfake generation techniques and includes both full video manipulation and selective facial feature editing.
+
+DeeperForensics-1.0 takes a different approach by focusing explicitly on adversarial robustness. It contains sixty thousand videos but augments them with real-world perturbations that deepfakes might encounter post-generation. These perturbations include video compression at various rates, color adjustments and saturation changes, resolution changes and downsampling, and various video codec artifacts. Training on DeeperForensics helps our models generalize beyond pristine test conditions to handle the messy reality of internet-distributed content.
+
+WildDeepfake provides our most important reality check by containing deepfakes collected directly from the internet rather than generated in controlled lab conditions. These videos represent the actual threats users might encounter including political deepfakes, celebrity impersonations, and malicious content. The quality varies dramatically from obvious fakes to sophisticated manipulations. Crucially, this dataset reveals failure modes in academic models that perform well on benchmark datasets but struggle with real-world diversity.
+
+### Audio-Visual Synchronization Datasets
+
+Detecting manipulated audio or desynchronized lip movements requires specialized datasets focused on audio-visual correspondence. Lip Reading in the Wild is a large-scale dataset of face videos with corresponding audio tracks, originally created for lip reading research but invaluable for training synchronization detectors. The dataset contains over half a million videos with diverse speakers in varied acoustic environments. We will use this as positive examples of natural audio-visual synchronization.
+
+VoxCeleb2 provides extensive clean speech data from celebrities extracted from YouTube videos. While primarily used for speaker recognition, it serves our purpose by providing authentic voice samples against which we can detect synthesis. The dataset includes over one million utterances from thousands of speakers with diverse accents and speaking styles. By training on authentic voice characteristics, we can better identify the subtle artifacts left by text-to-speech systems and voice conversion tools.
+
+The DFDC dataset also provides audio tracks for its videos, which we will analyze for synthesis artifacts and audio-visual mismatches. Many deepfakes focus visual manipulation while leaving audio untouched or poorly synchronized, creating detectable inconsistencies.
+
+### Synthetic Image Datasets
+
+While video datasets are critical for temporal analysis, we also need diverse synthetic image datasets for training spatial artifact detectors. We will generate custom synthetic datasets using StyleGAN2 and StyleGAN3 to produce faces that exhibit the characteristic artifacts of GAN generation including spectral anomalies in frequency space, subtle geometric inconsistencies in facial features, and unrealistic skin texture patterns. By controlling the generation process, we can create paired datasets of synthetic and real images that help models learn these subtle cues.
+
+Similarly, we will generate images using diffusion models including Stable Diffusion and DALL-E style architectures. Diffusion models produce different artifact patterns than GANs, typically with more natural textures but occasional anatomical impossibilities or inconsistent lighting. Exposure to both GAN and diffusion-generated content ensures our models do not overfit to artifacts specific to one generation paradigm.
+
+### Dataset Preprocessing and Augmentation
+
+Once datasets are downloaded, extensive preprocessing prepares them for effective model training. For video datasets, we extract frames at strategic intervals balancing temporal coverage with computational efficiency. Dense extraction at thirty frames per second captures all temporal information but is often unnecessary, so we typically sample at five to ten frames per second for most videos. Key frames around facial movements are preserved at higher density to capture manipulation artifacts that appear during expression changes.
+
+Face detection and alignment is performed using YOLO models to localize faces within each frame, followed by alignment to a canonical pose using facial landmarks. This alignment normalizes geometric variations, allowing models to focus on manipulation artifacts rather than natural pose differences. We extract both full frames and cropped face regions, as different models benefit from different input types.
+
+Quality filtering removes corrupted frames, heavily blurred or dark frames, and frames with no detected faces or multiple overlapping faces. We compute quality metrics including blur detection using Laplacian variance, brightness and contrast statistics, and face detection confidence scores. Frames below quality thresholds are excluded from training to prevent models from learning artifacts of poor video quality rather than manipulation.
+
+Data augmentation increases dataset size and improves robustness through transformations that preserve manipulation characteristics while varying irrelevant factors. Photometric augmentations include random brightness and contrast adjustment, color jittering and hue shifts, and JPEG compression with varying quality factors. Geometric augmentations include random cropping with resizing, horizontal flipping when appropriate for faces, and slight random rotations to simulate camera angles. Advanced augmentations include mixup blending between images, cutout randomly masking image regions, and adversarial noise injection at very low magnitudes.
+
+### Dataset Splitting Strategy
+
+Proper dataset splitting is crucial for honest performance evaluation and avoiding overfitting. We will use subject-level splits rather than random frame or video splits to ensure that the same person never appears in both training and test sets. This prevents models from memorizing individual identities rather than learning manipulation patterns. For video datasets, we split by original video with all manipulations of the same source video staying together in the same split.
+
+Our splitting strategy creates training, validation, and test sets with approximately seventy percent for training, fifteen percent for validation during hyperparameter tuning, and fifteen percent held out for final test evaluation. The test set remains strictly isolated until final model evaluation to prevent any data leakage through iterative development.
+
+Cross-dataset evaluation is equally important, where we train on some datasets and test on others to measure generalization. For example, we might train on FaceForensics++ and test on Celeb-DF and WildDeepfake to assess whether learned features transfer to unseen manipulation methods and quality levels. Poor cross-dataset performance often indicates overfitting to specific generation techniques or dataset characteristics.
+
+### Handling Dataset Bias and Imbalance
+
+Deepfake datasets often exhibit biases that can harm model fairness and performance. Demographic imbalance across age, gender, ethnicity, and other attributes means models may work better for some groups than others. We will stratify our splits to ensure diverse representation in training and evaluation sets, and we will explicitly measure performance across demographic subgroups to identify and address disparities.
+
+Class imbalance between real and fake samples is common, with some datasets having far more fakes than reals or vice versa. We will balance training batches through oversampling minority classes, undersampling majority classes, or using weighted loss functions that assign different importance to each class. This prevents models from achieving high accuracy by simply predicting the majority class.
+
+Manipulation method imbalance occurs because some techniques are more prevalent in datasets than others. We will track model performance separately for each manipulation method and apply targeted data augmentation or model capacity adjustments for underperforming categories.
+
+### Dataset Documentation and Versioning
+
+We will maintain detailed documentation for all datasets including download sources and access methods, licensing terms and usage restrictions, known biases and limitations, preprocessing steps applied, and train-validation-test split definitions. Dataset versions will be tracked using unique identifiers such as semantic versioning for generated datasets and commit hashes for preprocessing code. This documentation ensures reproducibility and allows future researchers to understand exactly what data contributed to model performance.
+
+### Synthetic Generation for Rare Scenarios
+
+To improve robustness against rare but important manipulation types, we will generate custom synthetic examples for scenarios underrepresented in public datasets. This includes partial face manipulation where only eyes or mouth are swapped, temporal inconsistencies with frame drops or duplicates, color space manipulations affecting specific channels, and adversarial perturbations designed to fool detectors. These synthetically enhanced scenarios help models generalize beyond the specific manipulation methods encountered during dataset collection.
